@@ -1,5 +1,5 @@
 """
-NV Audit API v3.0 — Backend completo
+NV Audit API v3.0 â Backend completo
 Features: Ahrefs, PageSpeed completo, Content Analysis IA, GBP, robots/sitemap,
            cache SQLite, white-label PDF, radar chart data
 Deploy: Railway
@@ -47,7 +47,7 @@ C_GRAY   = HexColor("#888888")
 C_GREEN  = HexColor("#34d399")
 C_RED    = HexColor("#f87171")
 
-# ── Cache (SQLite) ──────────────────────────────────────────────
+# ââ Cache (SQLite) ââââââââââââââââââââââââââââââââââââââââââââââ
 # Railway: mount a persistent volume at /data, or falls back to /tmp (ephemeral)
 DB_PATH = os.environ.get("CACHE_DB", "/data/nv_audit_cache.db")
 if not os.path.isdir(os.path.dirname(DB_PATH)):
@@ -89,7 +89,7 @@ def cache_set(domain, data):
         log.warning(f"Cache write failed: {e}")
 
 
-# ── Helpers ─────────────────────────────────────────────────────
+# ââ Helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 def check_rate_limit():
     """Simple in-memory rate limiting."""
     now = time.time()
@@ -117,24 +117,25 @@ def safe_get(url, params=None, headers=None, timeout=15):
         r.raise_for_status()
         return r
     except Exception as e:
-        log.warning(f"GET failed: {url} — {e}")
+        log.warning(f"GET failed: {url} â {e}")
         return None
 
 def fmt_num(n):
-    if n is None: return "—"
+    if n is None: return "â"
     n = int(n) if isinstance(n, (int, float)) else 0
     if n >= 1e6: return f"{n/1e6:.1f}M"
     if n >= 1e3: return f"{n/1e3:.1f}K"
     return str(n)
 
 
-# ══════════════════════════════════════════════════════════════
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # DATA COLLECTION MODULES
-# ══════════════════════════════════════════════════════════════
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
-# ── 1. Ahrefs ───────────────────────────────────────────────────
+# ââ 1. Ahrefs âââââââââââââââââââââââââââââââââââââââââââââââââââ
 def _ahrefs(endpoint, domain, extra_params=None):
-    params = {"target": domain, "output": "json", "mode": "subdomains"}
+    today = time.strftime("%Y-%m-%d")
+    params = {"target": domain, "output": "json", "mode": "subdomains", "date": today}
     if extra_params: params.update(extra_params)
     r = safe_get(f"{AHREFS_BASE}/site-explorer/{endpoint}",
         params=params, headers={"Authorization": f"Bearer {AHREFS_TOKEN}"})
@@ -155,7 +156,7 @@ def fetch_ahrefs_overview(domain):
     return d
 
 def fetch_ahrefs_organic(domain):
-    j = _ahrefs("metrics", domain, {"country": "es"})
+    j = _ahrefs("metrics", domain, {"country": "es", "select": "org_keywords,org_traffic,org_cost"})
     m = j.get("metrics", {})
     return {
         "organic_keywords": m.get("org_keywords", 0),
@@ -170,8 +171,8 @@ def fetch_ahrefs_top_keywords(domain, limit=10):
     return j.get("keywords", [])
 
 def fetch_ahrefs_competitors(domain, limit=5):
-    j = _ahrefs("competitors", domain, {"country": "es", "limit": limit})
-    return j.get("competitors", [])
+    j = _ahrefs("organic-competitors", domain, {"country": "es", "limit": limit, "select": "domain,organic_keywords,common_keywords,organic_traffic"})
+    return j.get("organic_competitors", [])
 
 def fetch_ahrefs_top_pages(domain, limit=5):
     j = _ahrefs("top-pages", domain,
@@ -186,7 +187,7 @@ def fetch_ahrefs_referring_domains(domain, limit=10):
     return j.get("refdomains", [])
 
 
-# ── 2. PageSpeed COMPLETO ──────────────────────────────────────
+# ââ 2. PageSpeed COMPLETO ââââââââââââââââââââââââââââââââââââââ
 def fetch_pagespeed_full(url, strategy="mobile"):
     params = {"url": url, "strategy": strategy,
               "category": ["performance", "seo", "best-practices", "accessibility"]}
@@ -252,7 +253,7 @@ def fetch_pagespeed_full(url, strategy="mobile"):
     }
 
 
-# ── 3. HTML Scraping + On-Page ─────────────────────────────────
+# ââ 3. HTML Scraping + On-Page âââââââââââââââââââââââââââââââââ
 def fetch_onpage_seo(url):
     r = safe_get(url, timeout=15)
     if not r: return {"error": "No se pudo acceder"}
@@ -355,7 +356,7 @@ def fetch_onpage_seo(url):
     return d
 
 
-# ── 4. Security Headers ────────────────────────────────────────
+# ââ 4. Security Headers ââââââââââââââââââââââââââââââââââââââââ
 def check_security_headers(url):
     r = safe_get(url, timeout=10)
     if not r: return {}
@@ -367,7 +368,7 @@ def check_security_headers(url):
     ]}
 
 
-# ── 5. Robots.txt + Sitemap.xml ────────────────────────────────
+# ââ 5. Robots.txt + Sitemap.xml ââââââââââââââââââââââââââââââââ
 def fetch_robots_sitemap(url):
     domain_url = re.match(r'(https?://[^/]+)', url)
     if not domain_url: return {}
@@ -425,7 +426,7 @@ def fetch_robots_sitemap(url):
     return result
 
 
-# ── 6. Google Business Profile ──────────────────────────────────
+# ââ 6. Google Business Profile ââââââââââââââââââââââââââââââââââ
 def fetch_gbp_data(domain):
     if not GPLACES_KEY:
         return {"available": False, "reason": "Google Places API key not configured"}
@@ -480,7 +481,7 @@ def fetch_gbp_data(domain):
     }
 
 
-# ── 7. Content Analysis (IA) ───────────────────────────────────
+# ââ 7. Content Analysis (IA) âââââââââââââââââââââââââââââââââââ
 def fetch_content_analysis(url, onpage_data, page_html=None):
     if not OPENAI_KEY: return {"error": "OpenAI not configured"}
 
@@ -508,20 +509,20 @@ Texto visible (primeros 4000 chars):
 JSON requerido:
 {{
   "content_score": <1-100>,
-  "readability": "fácil|medio|difícil",
+  "readability": "fÃ¡cil|medio|difÃ­cil",
   "tone": "<tono detectado>",
   "primary_topic": "<tema principal>",
   "target_audience": "<audiencia objetivo>",
   "keyword_density": [{{"keyword":"...","count":N,"density":"X%"}}],
   "content_gaps": ["<contenido que falta>"],
   "strengths": ["<punto fuerte>"],
-  "weaknesses": ["<punto débil>"],
-  "recommendations": ["<recomendación>"],
+  "weaknesses": ["<punto dÃ©bil>"],
+  "recommendations": ["<recomendaciÃ³n>"],
   "estimated_reading_time": "<X min>",
   "has_cta": true/false,
   "cta_quality": "buena|mejorable|ausente",
   "duplicate_risk": "bajo|medio|alto",
-  "seo_content_alignment": "<análisis de alineación SEO>"
+  "seo_content_alignment": "<anÃ¡lisis de alineaciÃ³n SEO>"
 }}"""
 
     try:
@@ -529,7 +530,7 @@ JSON requerido:
             headers={"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"},
             json={"model": "gpt-4o", "temperature": 0.2, "max_tokens": 2000,
                   "messages": [
-                      {"role": "system", "content": "Eres experto en content marketing y SEO. Responde SOLO con JSON válido, sin markdown."},
+                      {"role": "system", "content": "Eres experto en content marketing y SEO. Responde SOLO con JSON vÃ¡lido, sin markdown."},
                       {"role": "user", "content": prompt}]},
             timeout=45)
         content = r.json()["choices"][0]["message"]["content"].strip()
@@ -540,7 +541,7 @@ JSON requerido:
         return {"error": str(e)}
 
 
-# ── 8. Radar Chart Data ────────────────────────────────────────
+# ââ 8. Radar Chart Data ââââââââââââââââââââââââââââââââââââââââ
 def compute_radar_data(results):
     """Compute normalized 0-100 scores for radar chart."""
     ahrefs = {**results.get("ahrefs_overview", {}), **results.get("ahrefs_organic", {})}
@@ -578,7 +579,7 @@ def compute_radar_data(results):
     tech_score = int(sum(technical_checks) / len(technical_checks) * 100)
 
     return {
-        "labels": ["Autoridad", "Rendimiento", "SEO On-Page", "Contenido", "Social", "Técnico"],
+        "labels": ["Autoridad", "Rendimiento", "SEO On-Page", "Contenido", "Social", "TÃ©cnico"],
         "values": [
             min(100, int(dr)),
             psi.get("performance", 0),
@@ -590,7 +591,7 @@ def compute_radar_data(results):
     }
 
 
-# ── 9. GPT-4o Main Report ──────────────────────────────────────
+# ââ 9. GPT-4o Main Report ââââââââââââââââââââââââââââââââââââââ
 def generate_ai_report(all_data):
     if not OPENAI_KEY: return {"error": "OpenAI not configured"}
     system = """Eres consultor SEO senior de Negocio Vivo. Recibes datos REALES.
@@ -600,10 +601,10 @@ Responde SOLO JSON:
   "resumen_ejecutivo": "<3-4 frases>",
   "fortalezas": ["..."],
   "problemas_criticos": [{"titulo":"...","impacto":"alto|medio|bajo","solucion":"..."}],
-  "quick_wins": [{"accion":"...","impacto_estimado":"...","dificultad":"fácil|media|difícil"}],
-  "analisis_competencia": "<párrafo>",
-  "analisis_redes_sociales": "<párrafo>",
-  "analisis_gbp": "<párrafo sobre Google Business Profile>",
+  "quick_wins": [{"accion":"...","impacto_estimado":"...","dificultad":"fÃ¡cil|media|difÃ­cil"}],
+  "analisis_competencia": "<pÃ¡rrafo>",
+  "analisis_redes_sociales": "<pÃ¡rrafo>",
+  "analisis_gbp": "<pÃ¡rrafo sobre Google Business Profile>",
   "plan_accion_30_60_90": {"dias_30":["..."],"dias_60":["..."],"dias_90":["..."]},
   "cta_final": "<frase invitando a contactar>"
 }"""
@@ -625,9 +626,9 @@ Responde SOLO JSON:
         return {"error": str(e)}
 
 
-# ══════════════════════════════════════════════════════════════
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # PDF GENERATION (White-Label)
-# ══════════════════════════════════════════════════════════════
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 def _pdf_header(canvas, doc, domain, logo_url=None, brand_name=None):
     w, h = A4
     canvas.setFillColor(C_BLACK)
@@ -653,12 +654,12 @@ def _pdf_header(canvas, doc, domain, logo_url=None, brand_name=None):
     canvas.drawString(x_logo, h - 14*mm, name)
 
     canvas.setFillColor(C_WHITE); canvas.setFont("Helvetica", 9)
-    canvas.drawRightString(w - 15*mm, h - 11*mm, f"Auditoría SEO — {domain}")
+    canvas.drawRightString(w - 15*mm, h - 11*mm, f"AuditorÃ­a SEO â {domain}")
     canvas.drawRightString(w - 15*mm, h - 15.5*mm, time.strftime("%d/%m/%Y"))
 
     canvas.setFillColor(C_GRAY); canvas.setFont("Helvetica", 7)
     canvas.drawString(15*mm, 10*mm, brand_name or "negociovivo.com")
-    canvas.drawRightString(w - 15*mm, 10*mm, f"Página {doc.page}")
+    canvas.drawRightString(w - 15*mm, 10*mm, f"PÃ¡gina {doc.page}")
 
 
 def generate_pdf(data, logo_url=None, brand_name=None):
@@ -703,20 +704,20 @@ def generate_pdf(data, logo_url=None, brand_name=None):
 
     story = []
 
-    # ── Page 1: Score + Resumen ──
+    # ââ Page 1: Score + Resumen ââ
     story.append(Spacer(1, 8*mm))
-    story.append(Paragraph("Auditoría SEO Profesional", sT))
+    story.append(Paragraph("AuditorÃ­a SEO Profesional", sT))
     story.append(Paragraph(f"<b>{domain}</b>", ParagraphStyle("D", fontName="Helvetica-Bold", fontSize=14, textColor=C_ORANGE, spaceAfter=6*mm)))
     story.append(Paragraph(f"{ai.get('score_global', 0)}/100", sScore))
-    story.append(Paragraph("Puntuación Global", sC))
+    story.append(Paragraph("PuntuaciÃ³n Global", sC))
     story.append(Spacer(1, 4*mm))
     if ai.get("resumen_ejecutivo"):
         story.append(Paragraph(rl_esc(ai["resumen_ejecutivo"]), sB))
 
     # Metrics
     story.append(Spacer(1, 3*mm))
-    m_data = [["DR", "Keywords", "Tráfico/mes", "Backlinks", "Ref. Domains"],
-              [str(ah.get("domain_rating", "—")), fmt_num(ah.get("organic_keywords")),
+    m_data = [["DR", "Keywords", "TrÃ¡fico/mes", "Backlinks", "Ref. Domains"],
+              [str(ah.get("domain_rating", "â")), fmt_num(ah.get("organic_keywords")),
                fmt_num(ah.get("organic_traffic")), fmt_num(ah.get("backlinks_total")),
                fmt_num(ah.get("referring_domains"))]]
     t = Table(m_data, colWidths=[36*mm]*5)
@@ -748,29 +749,29 @@ def generate_pdf(data, logo_url=None, brand_name=None):
     if ai.get("fortalezas"):
         story.append(Paragraph("Fortalezas", sH2))
         for f in ai["fortalezas"]:
-            story.append(Paragraph(f"<font color='#34d399'>✓</font>  {rl_esc(f)}", sB))
+            story.append(Paragraph(f"<font color='#34d399'>â</font>  {rl_esc(f)}", sB))
     if ai.get("problemas_criticos"):
         story.append(Paragraph("Problemas Detectados", sH2))
         for p in ai["problemas_criticos"]:
             imp = (p.get("impacto") or "medio").upper()
             c = "#f87171" if imp == "ALTO" else "#fbbf24" if imp == "MEDIO" else "#60a5fa"
             story.append(Paragraph(f"<font color='{c}'><b>[{imp}]</b></font>  <b>{rl_esc(p.get('titulo',''))}</b>", sB))
-            if p.get("solucion"): story.append(Paragraph(f"    → {rl_esc(p['solucion'])}", sS))
+            if p.get("solucion"): story.append(Paragraph(f"    â {rl_esc(p['solucion'])}", sS))
 
     story.append(PageBreak())
 
-    # ── Page 2: Keywords + Competitors ──
+    # ââ Page 2: Keywords + Competitors ââ
     kws = data.get("ahrefs_keywords", [])
     if kws:
-        story.append(Paragraph("Top Keywords Orgánicos", sH2))
-        rows = [[rl_esc(k.get("keyword",""))[:35], str(k.get("position","—")), fmt_num(k.get("volume")),
-                 fmt_num(k.get("traffic")), str(k.get("difficulty","—"))] for k in kws]
-        story.append(make_table(["Keyword","Pos.","Vol.","Tráfico","KD"], rows,
+        story.append(Paragraph("Top Keywords OrgÃ¡nicos", sH2))
+        rows = [[rl_esc(k.get("keyword",""))[:35], str(k.get("position","â")), fmt_num(k.get("volume")),
+                 fmt_num(k.get("traffic")), str(k.get("difficulty","â"))] for k in kws]
+        story.append(make_table(["Keyword","Pos.","Vol.","TrÃ¡fico","KD"], rows,
                                [55*mm,18*mm,25*mm,25*mm,18*mm]))
 
     comps = data.get("ahrefs_competitors", [])
     if comps:
-        story.append(Paragraph("Competidores Orgánicos", sH2))
+        story.append(Paragraph("Competidores OrgÃ¡nicos", sH2))
         rows = [[rl_esc(c.get("domain","")), fmt_num(c.get("common_keywords")),
                  fmt_num(c.get("organic_keywords"))] for c in comps]
         story.append(make_table(["Dominio","KW comunes","KW totales"], rows, [70*mm,45*mm,45*mm]))
@@ -779,43 +780,43 @@ def generate_pdf(data, logo_url=None, brand_name=None):
 
     story.append(PageBreak())
 
-    # ── Page 3: Content + Social + GBP ──
+    # ââ Page 3: Content + Social + GBP ââ
     if isinstance(content, dict) and content.get("content_score"):
-        story.append(Paragraph("Análisis de Contenido", sH2))
-        story.append(Paragraph(f"Puntuación: <b>{content['content_score']}/100</b> · Legibilidad: <b>{rl_esc(content.get('readability','—'))}</b> · Lectura: <b>{rl_esc(content.get('estimated_reading_time','—'))}</b>", sB))
+        story.append(Paragraph("AnÃ¡lisis de Contenido", sH2))
+        story.append(Paragraph(f"PuntuaciÃ³n: <b>{content['content_score']}/100</b> Â· Legibilidad: <b>{rl_esc(content.get('readability','â'))}</b> Â· Lectura: <b>{rl_esc(content.get('estimated_reading_time','â'))}</b>", sB))
         if content.get("strengths"):
-            for s in content["strengths"]: story.append(Paragraph(f"<font color='#34d399'>✓</font> {rl_esc(s)}", sS))
+            for s in content["strengths"]: story.append(Paragraph(f"<font color='#34d399'>â</font> {rl_esc(s)}", sS))
         if content.get("weaknesses"):
-            for w in content["weaknesses"]: story.append(Paragraph(f"<font color='#f87171'>✗</font> {rl_esc(w)}", sS))
+            for w in content["weaknesses"]: story.append(Paragraph(f"<font color='#f87171'>â</font> {rl_esc(w)}", sS))
         if content.get("recommendations"):
             story.append(Paragraph("Recomendaciones:", sH3))
-            for r in content["recommendations"]: story.append(Paragraph(f"→ {rl_esc(r)}", sS))
+            for r in content["recommendations"]: story.append(Paragraph(f"â {rl_esc(r)}", sS))
 
     # Social
     soc = onpage.get("social_links", {})
     story.append(Paragraph("Redes Sociales", sH2))
     for p in ["facebook","instagram","twitter","linkedin","youtube","tiktok","pinterest"]:
         u = soc.get(p)
-        icon = "✓" if u else "✗"; c = "#34d399" if u else "#f87171"
+        icon = "â" if u else "â"; c = "#34d399" if u else "#f87171"
         val = rl_esc(u) if u else "No detectado"
         story.append(Paragraph(f"<font color='{c}'>{icon}</font>  <b>{p.capitalize()}</b>: {val}", sS))
 
     # GBP
     if gbp.get("available"):
         story.append(Paragraph("Google Business Profile", sH2))
-        story.append(Paragraph(f"<b>{rl_esc(gbp.get('name',''))}</b> · Rating: {gbp.get('rating','—')} ({gbp.get('total_reviews',0)} reseñas)", sB))
-        story.append(Paragraph(f"Dirección: {rl_esc(gbp.get('address','—'))}", sS))
-        story.append(Paragraph(f"Teléfono: {rl_esc(gbp.get('phone','—'))} · Fotos: {gbp.get('photo_count',0)} · Horario: {'Sí' if gbp.get('has_opening_hours') else 'No'}", sS))
+        story.append(Paragraph(f"<b>{rl_esc(gbp.get('name',''))}</b> Â· Rating: {gbp.get('rating','â')} ({gbp.get('total_reviews',0)} reseÃ±as)", sB))
+        story.append(Paragraph(f"DirecciÃ³n: {rl_esc(gbp.get('address','â'))}", sS))
+        story.append(Paragraph(f"TelÃ©fono: {rl_esc(gbp.get('phone','â'))} Â· Fotos: {gbp.get('photo_count',0)} Â· Horario: {'SÃ­' if gbp.get('has_opening_hours') else 'No'}", sS))
         if ai.get("analisis_gbp"): story.append(Paragraph(rl_esc(ai["analisis_gbp"]), sB))
 
     story.append(PageBreak())
 
-    # ── Page 4: Technical + Robots + Plan ──
+    # ââ Page 4: Technical + Robots + Plan ââ
     scores = psi_m.get("scores", {})
-    story.append(Paragraph("Rendimiento (Móvil)", sH2))
+    story.append(Paragraph("Rendimiento (MÃ³vil)", sH2))
     ps = [["Performance","SEO","Accesibilidad","Best Practices"],
-          [str(scores.get("performance","—")), str(scores.get("seo","—")),
-           str(scores.get("accessibility","—")), str(scores.get("best_practices","—"))]]
+          [str(scores.get("performance","â")), str(scores.get("seo","â")),
+           str(scores.get("accessibility","â")), str(scores.get("best_practices","â"))]]
     pt = Table(ps, colWidths=[44*mm]*4)
     pt.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),C_BLACK),("TEXTCOLOR",(0,0),(-1,0),C_WHITE),
@@ -830,27 +831,27 @@ def generate_pdf(data, logo_url=None, brand_name=None):
     rb = robots.get("robots_txt", {})
     sm = robots.get("sitemap", {})
     story.append(Paragraph("Robots.txt y Sitemap", sH2))
-    story.append(Paragraph(f"robots.txt: <b>{'Sí' if rb.get('exists') else 'No encontrado'}</b>", sB))
+    story.append(Paragraph(f"robots.txt: <b>{'SÃ­' if rb.get('exists') else 'No encontrado'}</b>", sB))
     if rb.get("exists"):
         story.append(Paragraph(f"  User-agents: {rl_esc(', '.join(rb.get('user_agents',[])))}", sS))
         story.append(Paragraph(f"  Reglas Disallow: {len(rb.get('disallow_rules',[]))}", sS))
-    story.append(Paragraph(f"Sitemap: <b>{'Sí' if sm.get('exists') else 'No encontrado'}</b>" +
+    story.append(Paragraph(f"Sitemap: <b>{'SÃ­' if sm.get('exists') else 'No encontrado'}</b>" +
                            (f" ({sm.get('url_count',0)} URLs)" if sm.get("exists") else ""), sB))
 
     # Quick Wins + Plan
     if ai.get("quick_wins"):
         story.append(Paragraph("Quick Wins", sH2))
         for q in ai["quick_wins"]:
-            story.append(Paragraph(f"<font color='#E07828'>→</font>  <b>{rl_esc(q.get('accion',''))}</b>", sB))
+            story.append(Paragraph(f"<font color='#E07828'>â</font>  <b>{rl_esc(q.get('accion',''))}</b>", sB))
             if q.get("impacto_estimado"): story.append(Paragraph(f"    Impacto: {rl_esc(q['impacto_estimado'])}", sS))
 
     if ai.get("plan_accion_30_60_90"):
-        story.append(Paragraph("Plan 30-60-90 Días", sH2))
-        for label, key in [("30 días","dias_30"),("60 días","dias_60"),("90 días","dias_90")]:
+        story.append(Paragraph("Plan 30-60-90 DÃ­as", sH2))
+        for label, key in [("30 dÃ­as","dias_30"),("60 dÃ­as","dias_60"),("90 dÃ­as","dias_90")]:
             items = ai["plan_accion_30_60_90"].get(key, [])
             if items:
                 story.append(Paragraph(f"<b>{label}</b>", sH3))
-                for i in items: story.append(Paragraph(f"→ {rl_esc(i)}", sB))
+                for i in items: story.append(Paragraph(f"â {rl_esc(i)}", sB))
 
     # CTA
     story.append(Spacer(1, 6*mm))
@@ -859,7 +860,7 @@ def generate_pdf(data, logo_url=None, brand_name=None):
     if ai.get("cta_final"):
         story.append(Paragraph(rl_esc(ai["cta_final"]), ParagraphStyle("CTA", fontName="Helvetica-Bold",
             fontSize=12, textColor=C_ORANGE, alignment=TA_CENTER, spaceAfter=3*mm)))
-    story.append(Paragraph(brand_name or "negociovivo.com · info@negociovivo.com", sC))
+    story.append(Paragraph(brand_name or "negociovivo.com Â· info@negociovivo.com", sC))
 
     doc.build(story,
         onFirstPage=lambda c, d: _pdf_header(c, d, domain, logo_url, brand_name),
@@ -868,9 +869,9 @@ def generate_pdf(data, logo_url=None, brand_name=None):
     return buf
 
 
-# ══════════════════════════════════════════════════════════════
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # ENDPOINTS
-# ══════════════════════════════════════════════════════════════
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 @app.route("/audit", methods=["POST"])
 def run_audit():
@@ -921,7 +922,7 @@ def run_audit():
             try: results[key] = future.result(timeout=45)
             except Exception as e: results[key] = {"error": str(e)}
 
-    # Content analysis — reuse HTML from onpage to avoid double fetch
+    # Content analysis â reuse HTML from onpage to avoid double fetch
     onpage = results.get("onpage", {})
     page_html = onpage.pop("_html", None)
     results["content_analysis"] = fetch_content_analysis(url, onpage, page_html)
