@@ -167,24 +167,52 @@ def fetch_ahrefs_organic(domain):
 def fetch_ahrefs_top_keywords(domain, limit=10):
     j = _ahrefs("organic-keywords", domain,
         {"country": "es", "limit": limit, "order_by": "volume:desc",
-         "select": "keyword,volume,position,traffic,difficulty"})
-    return j.get("keywords", [])
+         "select": "keyword,volume,best_position,sum_traffic,keyword_difficulty"})
+    raw = j.get("keywords", [])
+    for item in raw:
+        if "best_position" in item:
+            item["position"] = item.pop("best_position")
+        if "sum_traffic" in item:
+            item["traffic"] = item.pop("sum_traffic")
+        if "keyword_difficulty" in item:
+            item["difficulty"] = item.pop("keyword_difficulty")
+    return raw
 
 def fetch_ahrefs_competitors(domain, limit=5):
-    j = _ahrefs("organic-competitors", domain, {"country": "es", "limit": limit, "select": "domain,organic_keywords,common_keywords,organic_traffic"})
-    return j.get("organic_competitors", [])
+    j = _ahrefs("organic-competitors", domain, {"country": "es", "limit": limit, "select": "competitor_domain,keywords_common,traffic"})
+    raw = j.get("competitors", [])
+    for item in raw:
+        if "competitor_domain" in item:
+            item["domain"] = item.pop("competitor_domain")
+        if "keywords_common" in item:
+            item["common_keywords"] = item.pop("keywords_common")
+        if "traffic" in item:
+            item["organic_keywords"] = item.pop("traffic")
+    return raw
 
 def fetch_ahrefs_top_pages(domain, limit=5):
     j = _ahrefs("top-pages", domain,
         {"country": "es", "limit": limit,
-         "select": "url,traffic,keywords,top_keyword,position"})
-    return j.get("pages", [])
+         "select": "url,sum_traffic,keywords,top_keyword,top_keyword_best_position"})
+    raw = j.get("pages", [])
+    for item in raw:
+        if "sum_traffic" in item:
+            item["traffic"] = item.pop("sum_traffic")
+        if "top_keyword_best_position" in item:
+            item["position"] = item.pop("top_keyword_best_position")
+    return raw
 
 def fetch_ahrefs_referring_domains(domain, limit=10):
     j = _ahrefs("refdomains", domain,
         {"limit": limit, "order_by": "domain_rating:desc",
-         "select": "domain,domain_rating,backlinks,first_seen,last_visited"})
-    return j.get("refdomains", [])
+         "select": "domain,domain_rating,links_to_target,first_seen,last_seen"})
+    raw = j.get("refdomains", [])
+    for item in raw:
+        if "links_to_target" in item:
+            item["backlinks"] = item.pop("links_to_target")
+        if "last_seen" in item:
+            item["last_visited"] = item.pop("last_seen")
+    return raw
 
 
 # ââ 2. PageSpeed COMPLETO ââââââââââââââââââââââââââââââââââââââ
