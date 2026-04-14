@@ -1,5 +1,5 @@
 """
-NV Audit API v3.0 â Backend completo
+NV Audit API v4.0 â Backend completo
 Features: Ahrefs, PageSpeed completo, Content Analysis IA, GBP, robots/sitemap,
            cache SQLite, white-label PDF, radar chart data
 Deploy: Railway
@@ -1011,10 +1011,195 @@ def audit_history():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "version": "3.0",
+    return jsonify({"status": "ok", "version": "4.0",
                     "ahrefs": bool(AHREFS_TOKEN), "openai": bool(OPENAI_KEY),
                     "places": bool(GPLACES_KEY)})
 
 
-if __name__ == "__main__":
+
+
+# ════════════════════════════════════════════════════════════
+# V4 ENDPOINTS — Intake Form + Competitive Analysis
+# ════════════════════════════════════════════════════════════
+
+def fetch_competitor_ahrefs(comp_domain):
+    """Fetch Ahrefs data for a single competitor."""
+    try:
+        overview = fetch_ahrefs_overview(comp_domain)
+        organic = fetch_ahrefs_organic(comp_domain)
+        keywords = fetch_ahrefs_top_keywords(comp_domain, limit=5)
+        return {"domain": comp_domain, **overview, **organic, "top_keywords": keywords}
+    except Exception as e:
+        log.warning(f"Competitor fetch failed for {comp_domain}: {e}")
+        return {"domain": comp_domain, "error": str(e)}
+
+
+def compute_roi_analysis(services, results):
+    """Analyze ROI per channel based on services and investment data."""
+    ahrefs = {**results.get("ahrefs_overview", {}), **results.get("ahrefs_organic", {})}
+    onpage = results.get("onpage", {})
+    gbp = results.get("gbp", {})
+    channel_scores = {}
+    for svc in services:
+        name = svc.get("name", "").upper()
+        investment = svc.get("investment", 0) or 0
+        score, metrics, recommendation = 0, {}, ""
+        if name == "SEO":
+            dr = ahrefs.get("domain_rating") or 0
+            traffic = ahrefs.get("organic_traffic") or 0
+            kws = ahrefs.get("organic_keywords") or 0
+            score = min(100, int(dr * 0.4 + min(50, traffic / 100) + min(10, kws / 50)))
+            metrics = {"DR": dr, "traffic": traffic, "keywords": kws}
+            recommendation = "SEO necesita mejora urgente." if score < 40 else "SEO en progreso." if score < 70 else "Buen rendimiento SEO."
+        elif name == "SEM":
+            ppc = ahrefs.get("organic_traffic_value") or 0
+            score = min(100, int(ppc / 50)) if investment > 0 else 30
+            metrics = {"traffic_value": ppc, "investment": investment}
+            recommendation = f"ROI estimado: {ppc/investment:.1f}x" if investment > 0 and ppc > 0 else "Sin datos SEM suficientes."
+        elif name == "GMB":
+            if gbp.get("available"):
+                rating = gbp.get("rating") or 0
+                reviews = gbp.get("total_reviews") or 0
+                score = min(100, int(rating * 15 + min(25, reviews / 2)))
+                metrics = {"rating": rating, "reviews": reviews}
+                recommendation = "Perfil optimizado." if score >= 70 else "Mejorar reseñas y perfil GMB."
+            else:
+                recommendation = "No se encontró perfil GMB. Crear uno."
+        elif name == "RRSS":
+            sc = onpage.get("social_platforms_found", 0)
+            score = min(100, sc * 20)
+            metrics = {"platforms_detected": sc, "platforms": list(onpage.get("social_links", {}).keys())}
+            recommendation = f"{sc} redes detectadas. " + ("Buena presencia." if sc >= 4 else "Ampliar presencia.")
+        elif name == "MAILING":
+            has_nl = bool(re.search(r'newsletter|mailchimp|sendinblue|mailerlite', str(onpage.get("technologies", [])), re.I))
+            score = 60 if has_nl else 20
+            metrics = {"newsletter_detected": has_nl}
+            recommendation = "Email marketing detectado." if has_nl else "Implementar email marketing."
+        elif name == "SEO IA":
+            ca = results.get("content_analysis", {})
+            score = ca.get("content_score", 40) if isinstance(ca, dict) else 40
+            metrics = {"content_score": score}
+            recommendation = "Buen contenido IA." if score >= 60 else "Mejorar contenido con IA."
+        performance = "Alto" if score >= 70 else "Medio" if score >= 40 else "Bajo"
+        channel_scores[name] = {"score": score, "investment": investment, "performance": performance, "metrics": metrics, "recommendation": recommendation}
+    return channel_scores
+
+
+def generate_v4_ai_report(all_data, client_name, services, competitors_data):
+    """Enhanced AI report with competitive analysis and ROI."""
+    if not OPENAI_KEY:
+        return {"error": "OpenAI not configured"}
+    svc_names = ", ".join(s.get("name","") for s in services)
+    comp_names = ", ".join(c.get("domain","") for c in competitors_data if not c.get("error"))
+    system = f"""Eres consultor de marketing digital senior de Negocio Vivo.
+Analizas al cliente "{client_name}" que tiene contratados: {svc_names}.
+Sus competidores son: {comp_names}.
+Recibes datos REALES. Responde SOLO JSON valido (sin markdown):
+{{"score_global": <1-100>, "resumen_ejecutivo": "<3-4 frases>",
+"fortalezas": ["..."], "debilidades": ["..."],
+"problemas_criticos": [{{"titulo":"...","impacto":"alto|medio|bajo","solucion":"..."}}],
+"quick_wins": [{{"accion":"...","impacto_estimado":"...","dificultad":"facil|media|dificil"}}],
+"roi_summary": "<que canales rinden mejor y donde se desperdicia inversion>",
+"analisis_competencia": "<parrafo comparando con competidores>",
+"ventajas_sobre_competencia": ["..."], "desventajas_vs_competencia": ["..."],
+"analisis_redes_sociales": "<parrafo>", "analisis_gbp": "<parrafo>",
+"plan_accion_30_60_90": {{"dias_30":["..."],"dias_60":["..."],"dias_90":["..."]}}}}"""
+    try:
+        slim = {k: v for k, v in all_data.items() if k not in ("content_analysis_raw",)}
+        slim["competitors_summary"] = competitors_data
+        slim["client_name"] = client_name
+        slim["services"] = services
+        r = requests.post("https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"},
+            json={"model": "gpt-4o", "temperature": 0.3, "max_tokens": 4000,
+                  "messages": [{"role": "system", "content": system},
+                               {"role": "user", "content": json.dumps(slim, ensure_ascii=False)[:15000]}]},
+            timeout=90)
+        raw = r.json()["choices"][0]["message"]["content"].strip()
+        raw = re.sub(r'```\w*\n?', '', raw).strip()
+        return json.loads(raw)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def compute_v4_radar(results, competitors_data):
+    """Radar data including competitor comparison."""
+    client_radar = compute_radar_data(results)
+    comp_radars = []
+    for comp in competitors_data:
+        if comp.get("error"):
+            continue
+        dr = comp.get("domain_rating") or 0
+        comp_radars.append({"domain": comp.get("domain", "?"), "values": [min(100, int(dr)), 50, 50, 50, 50, 50]})
+    return {"labels": client_radar["labels"], "client_values": client_radar["values"], "competitor_radars": comp_radars}
+
+
+@app.route("/audit/v4", methods=["POST"])
+def run_audit_v4():
+    """V4 audit: client name, services with investment, competitors."""
+    auth = request.headers.get("Authorization", "")
+    if API_TOKEN and auth != f"Bearer {API_TOKEN}":
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    url = body.get("url", "").strip()
+    client_name = body.get("client_name", "").strip()
+    services = body.get("services", [])
+    competitors = body.get("competitors", [])
+    force = body.get("force", False)
+    if not url:
+        return jsonify({"error": "URL requerida"}), 400
+    url = clean_url(url)
+    domain = clean_domain(url)
+    if not check_rate_limit():
+        return jsonify({"error": "Rate limit exceeded"}), 429
+    log.info(f"V4 Audit: {domain} | Client: {client_name} | Services: {[s.get('name') for s in services]}")
+    t0 = time.time()
+    results = {"version": "4.0", "domain": domain, "url": url, "client_name": client_name,
+               "services": services, "competitor_domains": competitors,
+               "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {}
+        if AHREFS_TOKEN:
+            futures["ahrefs_overview"] = ex.submit(fetch_ahrefs_overview, domain)
+            futures["ahrefs_organic"] = ex.submit(fetch_ahrefs_organic, domain)
+            futures["ahrefs_keywords"] = ex.submit(fetch_ahrefs_top_keywords, domain)
+            futures["ahrefs_competitors"] = ex.submit(fetch_ahrefs_competitors, domain)
+            futures["ahrefs_top_pages"] = ex.submit(fetch_ahrefs_top_pages, domain)
+            futures["ahrefs_refdomains"] = ex.submit(fetch_ahrefs_referring_domains, domain)
+        futures["pagespeed_mobile"] = ex.submit(fetch_pagespeed_full, url, "mobile")
+        futures["pagespeed_desktop"] = ex.submit(fetch_pagespeed_full, url, "desktop")
+        futures["onpage"] = ex.submit(fetch_onpage_seo, url)
+        futures["security"] = ex.submit(check_security_headers, url)
+        futures["robots_sitemap"] = ex.submit(fetch_robots_sitemap, url)
+        futures["gbp"] = ex.submit(fetch_gbp_data, domain)
+        comp_futures = {}
+        if AHREFS_TOKEN:
+            for cd in competitors[:3]:
+                cc = clean_domain(cd) if cd.startswith("http") else cd.lower().replace("www.", "")
+                comp_futures[cc] = ex.submit(fetch_competitor_ahrefs, cc)
+        for key, future in futures.items():
+            try:
+                results[key] = future.result(timeout=45)
+            except Exception as e:
+                results[key] = {"error": str(e)}
+        competitors_data = []
+        for cd, future in comp_futures.items():
+            try:
+                competitors_data.append(future.result(timeout=45))
+            except Exception as e:
+                competitors_data.append({"domain": cd, "error": str(e)})
+    results["competitors_data"] = competitors_data
+    onpage = results.get("onpage", {})
+    page_html = onpage.pop("_html", None)
+    results["content_analysis"] = fetch_content_analysis(url, onpage, page_html)
+    results["roi_analysis"] = compute_roi_analysis(services, results)
+    total_inv = sum(s.get("investment", 0) or 0 for s in services)
+    results["investment_summary"] = {"total": total_inv, "by_channel": {s.get("name","?"): s.get("investment",0) for s in services}}
+    results["ai_report"] = generate_v4_ai_report(results, client_name, services, competitors_data)
+    results["radar_data"] = compute_v4_radar(results, competitors_data)
+    results["elapsed_seconds"] = round(time.time() - t0, 1)
+    cache_set(f"v4_{domain}", results)
+    return jsonify(results)
+
+\nif __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
