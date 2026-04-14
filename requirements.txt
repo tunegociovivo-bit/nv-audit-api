@@ -1,5 +1,10 @@
-flask==3.1.0
-flask-cors==5.0.0
+flask==3.1.1
+flask-cors==5.0.1
 gunicorn==23.0.0
 requests==2.32.3
-reportlab==4.2.5
+reportlab==4.4.0
+beautifulsoup4==4.13.4
+lxml==5.4.0
+openai==1.82.0
+matplotlib==3.10.3
+python-pptx==1.0.2
