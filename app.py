@@ -1201,5 +1201,6 @@ def run_audit_v4():
     cache_set(f"v4_{domain}", results)
     return jsonify(results)
 
-\nif __name__ == "__main__":
+
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
