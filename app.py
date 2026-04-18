@@ -1207,40 +1207,54 @@ def meta_call():
     """Relay authenticated requests to the Meta Graph API."""
     auth = request.headers.get("Authorization", "")
     if API_TOKEN and auth != f"Bearer {API_TOKEN}":
+        log.warning("meta_call: unauthorized request")
         return jsonify({"error": "Unauthorized"}), 401
 
     body = request.get_json(silent=True) or {}
-    method = body.get("method", "").strip().upper()
-    url = body.get("url", "").strip()
+    method = (body.get("method") or "").strip().upper()
+    url = (body.get("url") or "").strip()
     params = body.get("params") or {}
     post_body = body.get("body") or {}
-    access_token = body.get("access_token", "").strip()
+    access_token = (body.get("access_token") or "").strip()
 
     if not method or not url or not access_token:
-        return jsonify({"error": "Fields 'method', 'url', and 'access_token' are required"}), 400
+        missing = [f for f, v in [("method", method), ("url", url), ("access_token", access_token)] if not v]
+        log.warning(f"meta_call: missing required fields: {missing}")
+        return jsonify({"error": "Fields 'method', 'url', and 'access_token' are required", "missing": missing}), 400
+
+    if not isinstance(params, dict):
+        params = {}
 
     # Inject access token into query params
     params["access_token"] = access_token
+
+    log.info(f"meta_call: {method} {url}")
 
     try:
         if method == "GET":
             r = safe_get(url, params=params, timeout=15)
             if r is None:
-                return jsonify({"error": "Meta API request failed"}), 502
+                log.error(f"meta_call: GET request failed for {url}")
+                return jsonify({"error": "Meta API request failed or returned an error"}), 502
             try:
                 return jsonify(r.json()), r.status_code
             except Exception:
                 return r.text, r.status_code
         elif method == "POST":
-            r = requests.post(url, params=params, json=post_body, timeout=15)
             try:
-                return jsonify(r.json()), r.status_code
-            except Exception:
-                return r.text, r.status_code
+                r = requests.post(url, params=params, json=post_body, timeout=15)
+                try:
+                    return jsonify(r.json()), r.status_code
+                except Exception:
+                    return r.text, r.status_code
+            except Exception as e:
+                log.error(f"meta_call: POST request failed for {url} — {e}")
+                return jsonify({"error": f"Meta API POST request failed: {e}"}), 502
         else:
+            log.warning(f"meta_call: unsupported method '{method}'")
             return jsonify({"error": f"Unsupported method: {method}. Use GET or POST"}), 400
     except Exception as e:
-        log.error(f"Meta API relay error: {e}")
+        log.error(f"meta_call: unexpected error — {e}")
         return jsonify({"error": str(e)}), 500
 
 
