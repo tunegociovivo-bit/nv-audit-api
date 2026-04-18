@@ -1202,5 +1202,47 @@ def run_audit_v4():
     return jsonify(results)
 
 
+@app.route("/meta/call", methods=["POST"])
+def meta_call():
+    """Relay authenticated requests to the Meta Graph API."""
+    auth = request.headers.get("Authorization", "")
+    if API_TOKEN and auth != f"Bearer {API_TOKEN}":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    body = request.get_json(silent=True) or {}
+    method = body.get("method", "").strip().upper()
+    url = body.get("url", "").strip()
+    params = body.get("params") or {}
+    post_body = body.get("body") or {}
+    access_token = body.get("access_token", "").strip()
+
+    if not method or not url or not access_token:
+        return jsonify({"error": "Fields 'method', 'url', and 'access_token' are required"}), 400
+
+    # Inject access token into query params
+    params["access_token"] = access_token
+
+    try:
+        if method == "GET":
+            r = safe_get(url, params=params, timeout=15)
+            if r is None:
+                return jsonify({"error": "Meta API request failed"}), 502
+            try:
+                return jsonify(r.json()), r.status_code
+            except Exception:
+                return r.text, r.status_code
+        elif method == "POST":
+            r = requests.post(url, params=params, json=post_body, timeout=15)
+            try:
+                return jsonify(r.json()), r.status_code
+            except Exception:
+                return r.text, r.status_code
+        else:
+            return jsonify({"error": f"Unsupported method: {method}. Use GET or POST"}), 400
+    except Exception as e:
+        log.error(f"Meta API relay error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
